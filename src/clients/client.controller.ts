@@ -26,7 +26,7 @@ interface AuthenticatedRequest extends Request {
     userId: string;
     accountId: string;
     username: string;
-    role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+    role: 'ADMIN' | 'GERENTE' | 'OPERADOR';
   };
 }
 
@@ -36,29 +36,36 @@ export class ClientController {
   constructor(private readonly clientService: ClientService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR) // Exemplo: ADMIN, MANAGER e OPERATOR podem criar
-  async create(@Body() createClientDto: CreateClientDto, @Req() req: AuthenticatedRequest) {
+  @Roles(UserRole.ADMIN, UserRole.GERENTE, UserRole.OPERADOR) // Exemplo: ADMIN, GERENTE e OPERADOR podem criar
+  async create(
+    @Body() createClientDto: CreateClientDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const accountId = req.user.accountId; // Obtém o accountId do token JWT
     return this.clientService.create(accountId, createClientDto);
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR) // Exemplo: ADMIN, MANAGER e OPERATOR podem listar
+  @Roles(UserRole.ADMIN, UserRole.GERENTE, UserRole.OPERADOR) // Exemplo: ADMIN, GERENTE e OPERADOR podem listar
   async findAll(@Req() req: AuthenticatedRequest) {
     const accountId = req.user.accountId;
     return this.clientService.findAll(accountId);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR) // Exemplo: ADMIN, MANAGER e OPERATOR podem ver detalhes
+  @Roles(UserRole.ADMIN, UserRole.GERENTE, UserRole.OPERADOR) // Exemplo: ADMIN, GERENTE e OPERADOR podem ver detalhes
   async findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     const accountId = req.user.accountId;
     return this.clientService.findOne(id, accountId);
   }
 
   @Put(':id') // PUT para atualização completa ou PATCH para parcial, aqui usei PUT para simplicidade
-  @Roles(UserRole.ADMIN, UserRole.MANAGER) // Exemplo: Apenas ADMIN e MANAGER podem atualizar
-  async update(@Param('id') id: string, @Body() updateClientDto: UpdateClientDto, @Req() req: AuthenticatedRequest) {
+  @Roles(UserRole.ADMIN, UserRole.GERENTE) // Exemplo: Apenas ADMIN e GERENTE podem atualizar
+  async update(
+    @Param('id') id: string,
+    @Body() updateClientDto: UpdateClientDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const accountId = req.user.accountId;
     return this.clientService.update(id, accountId, updateClientDto);
   }

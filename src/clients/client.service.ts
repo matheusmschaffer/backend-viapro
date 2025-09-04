@@ -136,7 +136,7 @@ export class ClientService {
       await this.prisma.client.delete({
         where: { id, accountId }, // Garante que o cliente pertence à conta
       });
-      
+      return { message: `Cliente com ID "${id}" excluído com sucesso.` };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
         if (error.code === 'P2025') {
@@ -148,6 +148,5 @@ export class ClientService {
       }
       throw error;
     }
-    return {message: 'Excluído'}
   }
 }

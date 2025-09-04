@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { ClientModule } from './clients/client.module';
+import { DriversModule } from './drivers/drivers.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ClientModule } from './clients/client.module';
     UserModule,
     VehiclesModule,
     ClientModule,
+    DriversModule,
   ],
   controllers: [AppController],
   providers: [AppService],

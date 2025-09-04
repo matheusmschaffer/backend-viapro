@@ -1,5 +1,11 @@
-import { IsString, IsEmail, IsOptional, MaxLength, MinLength } from 'class-validator';
-import { Transform } from 'class-transformer';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+//import { Transform } from 'class-transformer';
 
 export class CreateClientDto {
   @IsString()
@@ -15,7 +21,9 @@ export class CreateClientDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(255, { message: 'Pessoa de contato não pode ter mais de 255 caracteres.' })
+  @MaxLength(255, {
+    message: 'Pessoa de contato não pode ter mais de 255 caracteres.',
+  })
   contactPerson?: string;
 
   @IsOptional()

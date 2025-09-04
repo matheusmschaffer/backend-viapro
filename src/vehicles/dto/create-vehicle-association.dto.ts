@@ -1,17 +1,17 @@
 // backend/src/vehicles/dto/create-vehicle-association.dto.ts
 import { IsNotEmpty, IsString, IsEnum, IsOptional } from 'class-validator';
-import { VehicleClassification } from '@prisma/client';
+import { AssociationType } from '@prisma/client';
 
 export class CreateVehicleAssociationDto {
   @IsString()
   @IsNotEmpty()
   vehicleId: string; // ID do veículo físico já existente
 
-  @IsEnum(VehicleClassification, {
+  @IsEnum(AssociationType, {
     message: 'Tipo de vínculo inválido. Use FROTA, AGREGADO ou TERCEIRO.',
   })
   @IsNotEmpty()
-  associationType: VehicleClassification;
+  associationType: AssociationType;
 
   @IsString()
   @IsOptional()

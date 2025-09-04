@@ -37,8 +37,8 @@ export class CreateUserDto {
   password: string;
 
   @IsEnum(UserRole, {
-    message: 'O papel (role) é inválido. Use ADMIN, MANAGER ou OPERATOR.',
+    message: 'O papel (role) é inválido. Use ADMIN, GERENTE ou OPERADOR.',
   })
   @IsNotEmpty({ message: 'O papel (role) é obrigatório.' })
-  role: UserRole; // ADMIN, MANAGER, OPERATOR
+  role: UserRole; // ADMIN, GERENTE, OPERADOR
 }

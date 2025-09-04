@@ -1,13 +1,13 @@
 // backend/src/vehicles/dto/update-vehicle-association.dto.ts
 import { IsOptional, IsEnum, IsBoolean, IsString } from 'class-validator';
-import { VehicleClassification } from '@prisma/client';
+import { AssociationType } from '@prisma/client';
 
 export class UpdateVehicleAssociationDto {
-  @IsEnum(VehicleClassification, {
+  @IsEnum(AssociationType, {
     message: 'Tipo de vínculo inválido. Use FROTA, AGREGADO ou TERCEIRO.',
   })
   @IsOptional()
-  associationType?: VehicleClassification;
+  associationType?: AssociationType;
 
   @IsBoolean()
   @IsOptional()

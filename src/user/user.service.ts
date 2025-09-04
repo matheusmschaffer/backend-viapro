@@ -39,12 +39,12 @@ export class UserService {
     const lowerCaseEmail = email.toLowerCase();
 
     // Validação de Permissão do RequestingUser (RBAC) usando requestingUserRole
-    if (requestingUserRole === UserRole.MANAGER && role !== UserRole.OPERATOR) {
+    if (requestingUserRole === UserRole.GERENTE && role !== UserRole.OPERADOR) {
       throw new ForbiddenException(
-        'Gerentes só podem criar usuários com o papel OPERATOR.',
+        'Gerentes só podem criar usuários com o papel OPERADOR.',
       );
     }
-    if (requestingUserRole === UserRole.OPERATOR) {
+    if (requestingUserRole === UserRole.OPERADOR) {
       throw new ForbiddenException(
         'Operadores não podem criar novos usuários.',
       );
@@ -166,16 +166,16 @@ export class UserService {
     if (updateUserDto.role) {
       // Se a role está sendo atualizada
       if (
-        requestingUserRole === UserRole.MANAGER &&
+        requestingUserRole === UserRole.GERENTE &&
         (updateUserDto.role === UserRole.ADMIN ||
           targetUser.role === UserRole.ADMIN ||
-          updateUserDto.role === UserRole.MANAGER)
+          updateUserDto.role === UserRole.GERENTE)
       ) {
         throw new ForbiddenException(
-          'Gerentes só podem alterar o papel para OPERATOR, e não podem alterar usuários com papel ADMIN ou MANAGER.',
+          'Gerentes só podem alterar o papel para OPERADOR, e não podem alterar usuários com papel ADMIN ou GERENTE.',
         );
       }
-      if (requestingUserRole === UserRole.OPERATOR) {
+      if (requestingUserRole === UserRole.OPERADOR) {
         throw new ForbiddenException(
           'Operadores não podem alterar o papel de usuários.',
         );
@@ -257,15 +257,15 @@ export class UserService {
 
     // 3. Validação de Permissão para deletar:
     if (
-      requestingUserRole === UserRole.MANAGER &&
+      requestingUserRole === UserRole.GERENTE &&
       (targetUser.role === UserRole.ADMIN ||
-        targetUser.role === UserRole.MANAGER)
+        targetUser.role === UserRole.GERENTE)
     ) {
       throw new ForbiddenException(
-        'Gerentes não podem excluir usuários com papel ADMIN ou MANAGER.',
+        'Gerentes não podem excluir usuários com papel ADMIN ou GERENTE.',
       );
     }
-    if (requestingUserRole === UserRole.OPERATOR) {
+    if (requestingUserRole === UserRole.OPERADOR) {
       throw new ForbiddenException('Operadores não podem excluir usuários.');
     }
 

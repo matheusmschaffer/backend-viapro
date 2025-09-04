@@ -9,7 +9,7 @@ export type JwtPayload = {
   userId: string;
   accountId: string;
   username: string;
-  role: 'ADMIN' | 'MANAGER' | 'OPERATOR'; // Tipos de role do seu enum UserRole
+  role: 'ADMIN' | 'GERENTE' | 'OPERADOR'; // Tipos de role do seu enum UserRole
 };
 
 @Injectable()

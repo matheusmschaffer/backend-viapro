@@ -26,7 +26,7 @@ interface AuthenticatedRequest extends Request {
     userId: string;
     accountId: string;
     username: string;
-    role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+    role: 'ADMIN' | 'GERENTE' | 'OPERADOR';
   };
 }
 
@@ -60,7 +60,7 @@ export class VehiclesController {
    * POST /vehicles/associate-existing
    * Associa um veículo físico existente a uma conta com um tipo de vínculo específico.
    * Usado para AGREGADO/TERCEIRO, ou para tentar adicionar um novo FROTA (que será validado).
-   * Role: ADMIN, MANAGER
+   * Role: ADMIN, GERENTE
    */
   @Post('associate-existing')
   async createVehicleAssociation(
@@ -68,7 +68,7 @@ export class VehiclesController {
     @Req() req: AuthenticatedRequest,
   ) {
     // Implementar RolesGuard aqui futuramente
-    // if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') throw new ForbiddenException('Você não tem permissão para associar veículos.');
+    // if (req.user.role !== 'ADMIN' && req.user.role !== 'GERENTE') throw new ForbiddenException('Você não tem permissão para associar veículos.');
     return this.vehiclesService.createVehicleAssociation(
       createAssociationDto,
       req.user.accountId,
@@ -126,7 +126,7 @@ export class VehiclesController {
   /**
    * PATCH /vehicles/:id/association
    * Atualiza os dados de uma associação de veículo-conta específica (tipo de vínculo, status de ativação, grupo).
-   * Role: ADMIN, MANAGER
+   * Role: ADMIN, GERENTE
    */
   @Patch(':id/association')
   async updateVehicleAccountAssociation(
@@ -135,7 +135,7 @@ export class VehiclesController {
     @Req() req: AuthenticatedRequest,
   ) {
     // Implementar RolesGuard aqui futuramente
-    // if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') throw new ForbiddenException('Você não tem permissão para atualizar associações de veículos.');
+    // if (req.user.role !== 'ADMIN' && req.user.role !== 'GERENTE') throw new ForbiddenException('Você não tem permissão para atualizar associações de veículos.');
     return this.vehiclesService.updateVehicleAccountAssociation(
       vehicleId,
       req.user.accountId,
@@ -165,7 +165,7 @@ export class VehiclesController {
    * DELETE /vehicles/:id/association
    * Deleta uma associação específica de um veículo com uma conta.
    * Isso não deleta o veículo físico, apenas o desvincula da conta.
-   * Role: ADMIN, MANAGER
+   * Role: ADMIN, GERENTE
    */
   @Delete(':id/association')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -174,7 +174,7 @@ export class VehiclesController {
     @Req() req: AuthenticatedRequest,
   ) {
     // Implementar RolesGuard aqui futuramente
-    // if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') throw new ForbiddenException('Você não tem permissão para desassociar veículos.');
+    // if (req.user.role !== 'ADMIN' && req.user.role !== 'GERENTE') throw new ForbiddenException('Você não tem permissão para desassociar veículos.');
     await this.vehiclesService.deleteVehicleAccountAssociation(
       vehicleId,
       req.user.accountId,

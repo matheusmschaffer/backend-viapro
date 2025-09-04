@@ -36,7 +36,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   email?: string;
 
   @IsEnum(UserRole, {
-    message: 'O papel (role) é inválido. Use ADMIN, MANAGER ou OPERATOR.',
+    message: 'O papel (role) é inválido. Use ADMIN, GERENTE ou OPERADOR.',
   })
   @IsOptional()
   role?: UserRole;

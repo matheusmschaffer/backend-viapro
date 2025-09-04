@@ -14,99 +14,47 @@ datasource db {
 }
 
 // ======================================
-// ENUMS (VALORES EM PORTUGUÊS, NOMES DO ENUM EM INGLÊS)
+// NOVOS ENUMS PARA OS NOVOS CAMPOS
 // ======================================
 enum OperationalStatus {
-  CARREGADO // Vehicle is loaded / carrying cargo
-  OCIOSO // Vehicle is idle / not in use
-  EM_MANUTENCAO // Vehicle is currently under maintenance
-  EM_VIAGEM // Vehicle is currently on a trip
-  PARADO // Vehicle is stopped
-  DESCONHECIDO // Unknown or initial status
+  CARREGADO      // Vehicle is loaded / carrying cargo (similar a EM_VIAGEM/EM_ANDAMENTO mas com foco na carga)
+  OCIOSO         // Vehicle is idle / not in use
+  EM_MANUTENCAO  // Vehicle is currently under maintenance
+  EM_VIAGEM      // Vehicle is currently on a trip (em movimento, sem carga específica em foco)
+  PARADO         // Vehicle is stopped (e.g., at a stopover, not necessarily idle)
+  DESCONHECIDO   // Unknown or initial status
 }
 
 enum LogisticStatus {
-  NO_PRAZO // On time
-  ATENCAO // Attention / Warning
-  ATRASADO // Delayed
-  CONCLUIDO // Trip completed successfully
-  PLANEJADO // Trip planned, not yet started
-  CANCELADO // Trip cancelled
-}
-
-// Enum compartilhado para tipos de associação de ativos (veículos, motoristas)
-enum AssociationType {
-  FROTA // Ativo é de propriedade/funcionario direto da conta
-  AGREGADO // Ativo pertence a um terceiro e presta serviço à conta (terceirizado)
-  TERCEIRO // Ativo está alugado/contratado temporariamente pela conta (locado)
-}
-
-enum DriverStatus {
-  ATIVO
-  INATIVO
-  LICENCA
-  FERIAS
-}
-
-enum AlertType {
-  ATRASO
-  DESVIO_ROTA
-  PARADA_NAO_PROGRAMADA
-  VELOCIDADE_EXCESSIVA
-  COMBUSTIVEL_BAIXO
-  MANUTENCAO_VENCIDA
-  DOCUMENTO_VENCIDO
-}
-
-enum AlertSeverity {
-  BAIXA
-  MEDIA
-  ALTA
-  CRITICA
-}
-
-enum SubscriptionStatus {
-  TESTE
-  ATIVA
-  EM_ATRASO
-  CANCELADA
-  SUSPENSA
-}
-
-enum InvoiceStatus {
-  PENDENTE
-  PAGA
-  VENCIDA
-  CANCELADA
-  ESTORNADA
-}
-
-enum UserRole {
-  ADMIN
-  GERENTE
-  OPERADOR
+  NO_PRAZO   // On time
+  ATENCAO    // Attention / Warning (e.g., slight delay, needs monitoring)
+  ATRASADO   // Delayed
+  CONCLUIDO  // Trip completed successfully
+  PLANEJADO  // Trip planned, not yet started
+  CANCELADO  // Trip cancelled
 }
 
 // ======================================
-// FIM DOS ENUMS
+// FIM DOS NOVOS ENUMS
 // ======================================
 
-// ==== ACCOUNT AND USER MANAGEMENT ====
+// ==== GESTÃO DE CONTAS E USUÁRIOS ====
 model Account {
   id           String   @id @default(uuid())
   companyName  String   @map("company_name")
-  companyCode  String   @unique @map("company_code")
+  companyCode  String   @unique @map("company_code") // Código único para login (ex: minhaempresa)
   cnpj         String?  @unique
-  email        String   @unique
+  email        String   @unique // Email de contato da empresa
   phone        String?
   address      String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  // Relacionamentos
+  // Relacionamentos existentes
   users               User[]
   vehicleGroups       VehicleGroup[]
+  drivers             Driver[]
   trips               Trip[]
   alerts              Alert[]
   subscription        Subscription?
@@ -114,23 +62,24 @@ model Account {
   usageMetrics        UsageMetric[]
   settings            AccountSetting?
   
-  clients             Client[]
-  
+  // Relacionamento com a NOVA TABELA Client
+  clients             Client[] // Um Account pode ter muitos Clients
+
+  // Relacionamento existente: Associações de veículos com esta conta
   vehicleAssociations VehicleAccountAssociation[] @relation("AccountVehicleAssociations")
-  driverAssociations  DriverAccountAssociation[]
 
   @@map("accounts")
 }
 
-// Users with roles
+// Users com roles
 model User {
   id           String    @id @default(uuid())
   accountId    String    @map("account_id")
-  username     String    @map("username")
+  username     String    @map("username") // Nome de usuário para login (ex: joao.silva)
   name         String
   email        String
   passwordHash String    @map("password_hash")
-  role         UserRole  @default(OPERADOR)
+  role         UserRole  @default(OPERATOR)
   active       Boolean   @default(true)
   lastLogin    DateTime? @map("last_login")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -141,11 +90,17 @@ model User {
   userVehicleGroups  UserVehicleGroup[]
   readAlerts         Alert[]              @relation("AlertReadBy")
 
-  @@unique([accountId, username])
+  @@unique([accountId, username]) // Login: username@companyCode
   @@map("users")
 }
 
-// Vehicle groups
+enum UserRole {
+  ADMIN
+  MANAGER
+  OPERATOR
+}
+
+// Grupos de veículos
 model VehicleGroup {
   id          String    @id @default(uuid())
   accountId   String    @map("account_id")
@@ -158,14 +113,16 @@ model VehicleGroup {
 
   // Relacionamentos
   account           Account              @relation(fields: [accountId], references: [id])
-  associatedVehicles VehicleAccountAssociation[]
+  // REMOVIDO: vehicles          Vehicle[] // Esta linha causou o erro! (Está correto manter removida se usar VehicleAccountAssociation)
+  associatedVehicles VehicleAccountAssociation[] // Relação com as associações de veículos neste grupo
+
   userVehicleGroups UserVehicleGroup[]
 
   @@unique([accountId, name])
   @@map("vehicle_groups")
 }
 
-// Access control
+// Controle de acesso
 model UserVehicleGroup {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -180,148 +137,148 @@ model UserVehicleGroup {
   @@map("user_vehicle_groups")
 }
 
-// ==== VEHICLE MANAGEMENT ====
+// ==== GESTÃO DE VEÍCULOS ====
+// Removido: accountId, classification diretamente da tabela Vehicle (Continua assim)
 model Vehicle {
   id                     String            @id @default(uuid())
-  plate                  String            @unique
+  plate                  String            @unique // Placa do veículo (ex: ABC1234 ou ABC1D23)
   brand                  String?
   model                  String?
   year                   Int?
   trackerDeviceId        String?           @map("tracker_device_id")
   trackerType            String?           @map("tracker_type")
-  active                 Boolean           @default(true)
+  active                 Boolean           @default(true) // Ativo no sistema (não globalmente inativo)
   
+  // Relação com o Motorista principal/atual do veículo (NÃO o motorista da viagem)
   driverId               String?
   driver                 Driver?           @relation(fields: [driverId], references: [id])
 
-  operationalStatus      OperationalStatus @default(DESCONHECIDO)
-  logisticStatus         LogisticStatus    @default(PLANEJADO)
-  efficiencyKmH          Float?
-  idleTimeMinutes        Int               @default(0)
-  distanceToDestinationKm Float?
-  currentLocationLat     Float?
-  currentLocationLon     Float?
-  currentLocationAddress String?
-  lastLocationUpdateAt   DateTime?
+  // NOVOS CAMPOS SOLICITADOS - ADICIONADOS AQUI
+  operationalStatus      OperationalStatus @default(DESCONHECIDO) // Status operacional do veículo
+  logisticStatus         LogisticStatus    @default(PLANEJADO)    // Status logístico do veículo (derivado de trips ou manualmente)
+  efficiencyKmH          Float?            // Eficiência em Km/h (velocidade média de movimento)
+  idleTimeMinutes        Int               @default(0) // Tempo em minutos que o veículo está parado/ocioso
+  distanceToDestinationKm Float?           // Distância restante até o destino final da viagem atual
+  currentLocationLat     Float?            // Latitude da localização atual
+  currentLocationLon     Float?            // Longitude da localização atual
+  currentLocationAddress String?           // Endereço da localização atual
+  lastLocationUpdateAt   DateTime?         // Timestamp da última atualização de localização
 
-  currentTripId          String?           @unique
-  currentTrip            Trip?             @relation("VehicleCurrentTrip", fields: [currentTripId], references: [id], onDelete: SetNull)
+  // Relação 1:1 para a viagem atual. Um veículo só pode ter uma viagem "currentTrip" por vez.
+  currentTripId          String?           @unique // ID da viagem atual que o veículo está realizando
+  currentTrip            Trip?             @relation("VehicleCurrentTrip", fields: [currentTripId], references: [id], onDelete: SetNull) // onDelete: SetNull para não apagar a viagem se o veículo for desassociado ou deletado.
 
-  kmToday                Float             @default(0)
-  inMaintenance          Boolean           @default(false)
+  // Campos adicionais observados no dashboard (ex: "KM Hoje", "Em Manutenção")
+  kmToday                Float             @default(0) // Quilometragem rodada no dia atual
+  inMaintenance          Boolean           @default(false) // Indica se o veículo está em manutenção
 
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
+  // Relacionamento existente: Um veículo pode ter muitas associações com contas
   accountAssociations VehicleAccountAssociation[] @relation("VehicleAccountAssociations")
-  trips           Trip[]
+
+  // Relacionamentos existentes
+  trips           Trip[] // Um veículo pode ter muitas viagens ao longo de sua vida útil
   positions       VehiclePosition[]
   alerts          Alert[]
 
   @@map("vehicles")
 }
 
-// VehicleAccountAssociation - AGORA USA AssociationType
+// Enum VehicleClassification existente
+enum VehicleClassification {
+  FROTA
+  AGREGADO
+  TERCEIRO
+}
+
+// Tabela de associação existente VehicleAccountAssociation
 model VehicleAccountAssociation {
   vehicleId        String                 @map("vehicle_id")
   accountId        String                 @map("account_id")
-  associationType  AssociationType        @map("association_type") // AGORA USA AssociationType
+  associationType  VehicleClassification  @map("association_type") // ENUM: FROTA, AGREGADO, TERCEIRO
   isActiveForAccount Boolean              @default(true) @map("is_active_for_account")
-  groupId          String?                @map("group_id")
+  groupId          String?                @map("group_id") // Referência ao grupo do veículo para esta associação
 
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
 
+  // Relações com as tabelas Vehicle, Account e VehicleGroup
   vehicle Vehicle @relation("VehicleAccountAssociations", fields: [vehicleId], references: [id])
   account Account @relation("AccountVehicleAssociations", fields: [accountId], references: [id])
-  group   VehicleGroup? @relation(fields: [groupId], references: [id])
+  group   VehicleGroup? @relation(fields: [groupId], references: [id]) // Relação com VehicleGroup
 
-  @@id([vehicleId, accountId])
+  @@id([vehicleId, accountId]) // Chave primária composta
   @@map("vehicle_account_associations")
 }
 
 
-// Motoristas (reestruturado para CPF unique e associação com Account)
+// Motoristas
 model Driver {
-  id              String        @id @default(uuid()) // UUID como PK interna do sistema
-  cpf             String        @unique @db.VarChar(11) // CPF como identificador único de negócio
-  fullName        String        @map("full_name") @db.VarChar(255) // Renomeado de 'name' para 'fullName'
-  dateOfBirth     DateTime?     @map("date_of_birth") @db.Date // Novo campo
-  phone           String?       @db.VarChar(20)
-  email           String?       @db.VarChar(255) // Removido @unique (email não é mais globalmente único)
-  cnhNumber       String?       @map("cnh_number") @db.VarChar(11) // Renomeado de 'cnh' para 'cnhNumber', removido @unique
-  cnhCategory     String?       @map("cnh_category") @db.VarChar(5) // Novo campo
-  cnhExpiration   DateTime?     @map("cnh_expiration") @db.Date // Novo campo
-  status          DriverStatus  @default(ATIVO)
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id        String       @id @default(uuid())
+  accountId String       @map("account_id")
+  name      String
+  cnh       String?      @unique // Alterado para String? para permitir ser opcional, mas @unique para ser único se preenchido
+  phone     String?
+  email     String?      @unique // Alterado para String? para permitir ser opcional, mas @unique para ser único se preenchido
+  status    DriverStatus @default(ATIVO)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
 
   // Relacionamentos
-  accountAssociations DriverAccountAssociation[] // Nova relação com DriverAccountAssociation
-  vehicles            Vehicle[] // back-relation para Vehicle.driverId
-  trips               Trip[]    @relation("TripDriver")
+  account  Account    @relation(fields: [accountId], references: [id])
+  vehicles Vehicle[]  // Um motorista pode ser o motorista principal/atual de muitos veículos (back-relation para Vehicle.driverId)
+  trips    Trip[]     @relation("TripDriver") // Um motorista pode fazer muitas viagens (como motorista específico para esta viagem)
 
   @@map("drivers")
 }
 
-// NOVA: Tabela de associação entre Motoristas e Contas
-model DriverAccountAssociation {
-  id                 String          @id @default(uuid())
-  driverId           String          @map("driver_id")
-  accountId          String          @map("account_id")
-  associationType    AssociationType @map("association_type") // Usa o enum compartilhado
-  startDate          DateTime        @map("start_date") @db.Date
-  endDate            DateTime?       @map("end_date") @db.Date
-  isActive           Boolean         @map("is_active") @default(true)
-
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
-
-  // Relacionamentos
-  driver             Driver          @relation(fields: [driverId], references: [id])
-  account            Account         @relation(fields: [accountId], references: [id])
-
-  // Lógica para unicidade de associação ativa por motorista/conta deve ser na aplicação
-  // O índice abaixo previne múltiplos registros de mesma driver/account/isActive, mas não "isActive = true"
-  @@unique([driverId, accountId, isActive])
-
-  @@map("driver_account_associations")
+enum DriverStatus {
+  ATIVO
+  INATIVO
+  LICENCA
+  FERIAS
 }
 
 // ======================================
-// CLIENT MANAGEMENT
+// NOVA TABELA CLIENT
 // ======================================
 model Client {
   id            String   @id @default(uuid())
-  accountId     String   @map("account_id")
-  name          String
-  address       String?
-  contactPerson String?  @map("contact_person")
-  email         String?  @unique // Mantido @unique, pois é um cliente (e-mail de contato do cliente)
-  phone         String?
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  accountId     String   @map("account_id") // Um cliente pertence a uma conta da transportadora
+  name          String   // Nome do cliente
+  address       String?  // Endereço do cliente
+  contactPerson String?  // Pessoa de contato do cliente
+  email         String?  @unique // E-mail do cliente (opcional, mas bom ter um @unique se usado)
+  phone         String?  // Telefone do cliente
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relacionamentos
   account       Account  @relation(fields: [accountId], references: [id])
-  trips         Trip[]
+  trips         Trip[]   // Um cliente pode ter muitas viagens
 
-  @@unique([accountId, name])
+  @@unique([accountId, name]) // Nome do cliente único por conta
   @@map("clients")
 }
+// ======================================
+// FIM DA NOVA TABELA CLIENT
+// ======================================
 
-// ======================================
-// TRIP MANAGEMENT
-// ======================================
+
+// Core - Viagens
 model Trip {
   id                   String       @id @default(uuid())
   accountId            String       @map("account_id")
   vehicleId            String       @map("vehicle_id")
   
-  clientId             String       @map("client_id")
+  // NOVO: Adicionado clientId para relacionar a viagem a um cliente
+  clientId             String       @map("client_id") // Relaciona a viagem a um cliente
   
-  driverId             String       @map("driver_id") // Referencia Driver.id (UUID)
-  
+  // NOVO: tripDriverId para o motorista específico desta viagem (pode ser diferente do driverId do Vehicle)
+  tripDriverId         String?      @map("trip_driver_id") 
+
   createdByUserId      String       @map("created_by_user_id")
   origin               String
   destination          String
@@ -334,11 +291,14 @@ model Trip {
   actualDeparture      DateTime?    @map("actual_departure")
   actualArrival        DateTime?    @map("actual_arrival")
   
+  // NOVO: status agora usa o Enum LogisticStatus
   status               LogisticStatus @default(PLANEJADO) 
   
   cargoDescription     String?      @map("cargo_description")
   cargoWeight          Decimal?     @map("cargo_weight") @db.Decimal(10, 2)
   
+  // clientName e clientContact podem ser mantidos como cache ou se necessário para compatibilidade,
+  // mas a relação principal é com clientId.
   clientName           String?      @map("client_name") 
   clientContact        String?      @map("client_contact")
   
@@ -350,21 +310,34 @@ model Trip {
   account   Account           @relation(fields: [accountId], references: [id])
   vehicle   Vehicle           @relation(fields: [vehicleId], references: [id])
   
+  // NOVA Relação com a tabela Client
   client    Client            @relation(fields: [clientId], references: [id])
   
-  tripDriver Driver           @relation("TripDriver", fields: [driverId], references: [id])
+  // NOVA Relação com o motorista específico da viagem (TripDriver)
+  tripDriver Driver?          @relation("TripDriver", fields: [tripDriverId], references: [id])
   
   createdBy User              @relation("TripCreatedBy", fields: [createdByUserId], references: [id])
   positions VehiclePosition[]
   alerts    Alert[]
   routePoints RoutePoint[]
 
+  // Back-relation para o campo currentTrip na tabela Vehicle (para a relação 1:1)
   vehicleCurrentTrip Vehicle? @relation("VehicleCurrentTrip")
 
   @@map("trips")
 }
 
-// Vehicle positions
+// O antigo enum TripStatus não é mais necessário se LogisticStatus for usado.
+// Se precisar de ambos para diferentes propósitos, pode mantê-lo e renomear o campo status em Trip.
+// enum TripStatus {
+//   PLANEJADA
+//   EM_ANDAMENTO
+//   CONCLUIDA
+//   CANCELADA
+//   ATRASADA
+// }
+
+// Posições dos veículos
 model VehiclePosition {
   id           String   @id @default(uuid())
   vehicleId    String   @map("vehicle_id")
@@ -388,7 +361,7 @@ model VehiclePosition {
   @@map("vehicle_positions")
 }
 
-// Alert system
+// Sistema de alertas
 model Alert {
   id          String        @id @default(uuid())
   accountId   String        @map("account_id")
@@ -397,7 +370,7 @@ model Alert {
   type        AlertType
   title       String
   description String?
-  severity    AlertSeverity @default(MEDIA)
+  severity    AlertSeverity @default(MEDIUM)
   alertData   Json?         @map("alert_data")
   read        Boolean       @default(false)
   readByUserId String?      @map("read_by_user_id")
@@ -414,7 +387,24 @@ model Alert {
   @@map("alerts")
 }
 
-// Route points (for deviation detection)
+enum AlertType {
+  ATRASO
+  DESVIO_ROTA
+  PARADA_NAO_PROGRAMADA
+  VELOCIDADE_EXCESSIVA
+  COMBUSTIVEL_BAIXO
+  MANUTENCAO_VENCIDA
+  DOCUMENTO_VENCIDO
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Pontos da rota (para detecção de desvios)
 model RoutePoint {
   id                    String   @id @default(uuid())
   tripId                String   @map("trip_id")
@@ -431,7 +421,7 @@ model RoutePoint {
   @@map("route_points")
 }
 
-// ==== BILLING SYSTEM ====
+// ==== SISTEMA DE BILLING ====
 
 model SubscriptionPlan {
   id             String         @id @default(uuid())
@@ -455,7 +445,7 @@ model Subscription {
   id                   String             @id @default(uuid())
   accountId            String             @unique @map("account_id")
   planId               String             @map("plan_id")
-  status               SubscriptionStatus @default(TESTE)
+  status               SubscriptionStatus @default(TRIAL)
   startedAt            DateTime           @map("started_at")
   trialEndsAt          DateTime?          @map("trial_ends_at")
   currentPeriodStart   DateTime           @map("current_period_start")
@@ -475,6 +465,14 @@ model Subscription {
   @@map("subscriptions")
 }
 
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+}
+
 model Invoice {
   id               String        @id @default(uuid())
   accountId        String        @map("account_id")
@@ -487,7 +485,7 @@ model Invoice {
   subtotal         Decimal       @db.Decimal(10, 2)
   taxes            Decimal       @default(0) @db.Decimal(10, 2)
   total            Decimal       @db.Decimal(10, 2)
-  status           InvoiceStatus @default(PENDENTE)
+  status           InvoiceStatus @default(PENDING)
   dueDate          DateTime      @map("due_date")
   paidAt           DateTime?     @map("paid_at")
   stripeInvoiceId  String?       @map("stripe_invoice_id")
@@ -499,6 +497,14 @@ model Invoice {
   subscription Subscription @relation(fields: [subscriptionId], references: [id])
 
   @@map("invoices")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELED
+  REFUNDED
 }
 
 model UsageMetric {
@@ -521,7 +527,7 @@ model UsageMetric {
   @@map("usage_metrics")
 }
 
-// Account settings
+// Configurações por conta
 model AccountSetting {
   id                        String   @id @default(uuid())
   accountId                 String   @unique @map("account_id")

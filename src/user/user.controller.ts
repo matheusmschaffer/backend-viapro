@@ -40,10 +40,10 @@ export class UserController {
   /**
    * POST /users
    * Cria um novo usuário para a conta do usuário logado.
-   * Apenas ADMINs e MANAGERs (para OPERATOR) podem criar usuários.
+   * Apenas ADMINs e GERENTEs (para OPERADOR) podem criar usuários.
    */
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER) // Apenas ADMINs e MANAGERs podem acessar este endpoint
+  @Roles(UserRole.ADMIN, UserRole.GERENTE) // Apenas ADMINs e GERENTEs podem acessar este endpoint
   async create(
     @Body() createUserDto: CreateUserDto,
     @Req() req: AuthenticatedRequest,
@@ -58,10 +58,10 @@ export class UserController {
   /**
    * GET /users
    * Lista todos os usuários da conta do usuário logado.
-   * Apenas ADMINs e MANAGERs podem listar todos os usuários.
+   * Apenas ADMINs e GERENTEs podem listar todos os usuários.
    */
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.GERENTE)
   async findAll(@Req() req: AuthenticatedRequest) {
     return this.userService.findAllByAccount(req.user.accountId);
   }
@@ -69,13 +69,13 @@ export class UserController {
   /**
    * GET /users/:id
    * Busca um usuário específico da conta do usuário logado.
-   * ADMINs e MANAGERs podem ver qualquer usuário. OPERATORs podem ver apenas a si mesmos.
+   * ADMINs e GERENTEs podem ver qualquer usuário. OPERADORs podem ver apenas a si mesmos.
    */
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)
+  @Roles(UserRole.ADMIN, UserRole.GERENTE, UserRole.OPERADOR)
   async findOne(@Param('id') userId: string, @Req() req: AuthenticatedRequest) {
-    // Se um OPERATOR tentar acessar outro usuário, nega.
-    if (req.user.role === UserRole.OPERATOR && req.user.userId !== userId) {
+    // Se um OPERADOR tentar acessar outro usuário, nega.
+    if (req.user.role === UserRole.OPERADOR && req.user.userId !== userId) {
       throw new ForbiddenException(
         'Operadores só podem visualizar seus próprios dados.',
       );
@@ -86,27 +86,27 @@ export class UserController {
   /**
    * PATCH /users/:id
    * Atualiza os dados de um usuário específico.
-   * ADMINs podem atualizar qualquer usuário. MANAGERs podem atualizar OPERATORs. OPERATORs podem atualizar apenas a si mesmos (nome, email).
+   * ADMINs podem atualizar qualquer usuário. GERENTEs podem atualizar OPERADORs. OPERADORs podem atualizar apenas a si mesmos (nome, email).
    */
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)
+  @Roles(UserRole.ADMIN, UserRole.GERENTE, UserRole.OPERADOR)
   async update(
     @Param('id') userIdToUpdate: string,
     @Body() updateUserDto: UpdateUserDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    // Se um OPERATOR tentar atualizar outro usuário, ou tentar alterar role/active.
+    // Se um OPERADOR tentar atualizar outro usuário, ou tentar alterar role/active.
     if (
-      req.user.role === UserRole.OPERATOR &&
+      req.user.role === UserRole.OPERADOR &&
       req.user.userId !== userIdToUpdate
     ) {
       throw new ForbiddenException(
         'Operadores só podem atualizar seus próprios dados.',
       );
     }
-    // Se o OPERATOR tentar alterar role ou active, mesmo que seja a si mesmo.
+    // Se o OPERADOR tentar alterar role ou active, mesmo que seja a si mesmo.
     if (
-      req.user.role === UserRole.OPERATOR &&
+      req.user.role === UserRole.OPERADOR &&
       (updateUserDto.role !== undefined || updateUserDto.active !== undefined)
     ) {
       throw new ForbiddenException(
@@ -126,11 +126,11 @@ export class UserController {
   /**
    * DELETE /users/:id
    * Deleta um usuário específico.
-   * Apenas ADMINs podem deletar ADMINs e MANAGERs. MANAGERs podem deletar apenas OPERATORs. OPERATORs não podem deletar.
+   * Apenas ADMINs podem deletar ADMINs e GERENTEs. GERENTEs podem deletar apenas OPERADORs. OPERADORs não podem deletar.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.GERENTE)
   async remove(
     @Param('id') userIdToDelete: string,
     @Req() req: AuthenticatedRequest,

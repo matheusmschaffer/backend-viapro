@@ -42,16 +42,16 @@ export class RolesGuard implements CanActivate {
       // Se a role do usuário for MANAGER, ele tem permissão para MANAGER e OPERATOR.
       // Então, se a requiredRole for MANAGER ou OPERATOR, e o user.role for MANAGER, permite.
       if (
-        user.role === UserRole.MANAGER &&
-        (requiredRole === UserRole.MANAGER ||
-          requiredRole === UserRole.OPERATOR)
+        user.role === UserRole.GERENTE &&
+        (requiredRole === UserRole.GERENTE ||
+          requiredRole === UserRole.OPERADOR)
       ) {
         return true;
       }
       // Se a role do usuário for OPERATOR, ele tem permissão apenas para OPERATOR.
       if (
-        user.role === UserRole.OPERATOR &&
-        requiredRole === UserRole.OPERATOR
+        user.role === UserRole.OPERADOR &&
+        requiredRole === UserRole.OPERADOR
       ) {
         return true;
       }

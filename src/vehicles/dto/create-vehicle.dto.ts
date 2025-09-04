@@ -9,7 +9,7 @@ import {
   Max,
   Matches,
 } from 'class-validator';
-import { VehicleClassification } from '@prisma/client'; // Importe o ENUM do Prisma
+import { AssociationType } from '@prisma/client'; // Importe o ENUM do Prisma
 
 export class CreateVehicleDto {
   @IsString()
@@ -42,11 +42,11 @@ export class CreateVehicleDto {
   trackerType?: string;
 
   // Para a associação inicial, geralmente será 'FROTA'
-  @IsEnum(VehicleClassification, {
+  @IsEnum(AssociationType, {
     message: 'Tipo de vínculo inválido. Use FROTA, AGREGADO ou TERCEIRO.',
   })
   @IsNotEmpty()
-  associationType: VehicleClassification;
+  associationType: AssociationType;
 
   @IsString()
   @IsOptional()

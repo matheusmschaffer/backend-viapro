@@ -11,7 +11,7 @@ import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { CreateVehicleAssociationDto } from './dto/create-vehicle-association.dto';
 import { UpdateVehicleAssociationDto } from './dto/update-vehicle-association.dto';
-import { VehicleClassification } from '@prisma/client'; // Importe o ENUM
+import { AssociationType } from '@prisma/client'; // Importe o ENUM
 
 @Injectable()
 export class VehiclesService {
@@ -113,14 +113,14 @@ export class VehiclesService {
     }
 
     // 3. Validações específicas para associationType
-    if (associationType === VehicleClassification.FROTA) {
+    if (associationType === AssociationType.FROTA) {
       // Se tentar adicionar um novo vínculo FROTA, a DB constraint `uix_one_frota_per_vehicle` já vai pegar
       // Mas podemos dar uma mensagem mais amigável
       const existingFrota =
         await this.prisma.vehicleAccountAssociation.findFirst({
           where: {
             vehicleId: vehicleId,
-            associationType: VehicleClassification.FROTA,
+            associationType: AssociationType.FROTA,
           },
         });
       if (existingFrota) {
@@ -221,7 +221,7 @@ export class VehiclesService {
       await this.prisma.vehicleAccountAssociation.findFirst({
         where: {
           vehicleId: vehicleId,
-          associationType: VehicleClassification.FROTA,
+          associationType: AssociationType.FROTA,
         },
       });
 
@@ -297,15 +297,15 @@ export class VehiclesService {
 
     // 2. Validações para mudança de associationType para FROTA
     if (
-      updateAssociationDto.associationType === VehicleClassification.FROTA &&
-      association.associationType !== VehicleClassification.FROTA
+      updateAssociationDto.associationType === AssociationType.FROTA &&
+      association.associationType !== AssociationType.FROTA
     ) {
       // Se está tentando mudar para FROTA e não era FROTA antes
       const existingFrota =
         await this.prisma.vehicleAccountAssociation.findFirst({
           where: {
             vehicleId: vehicleId,
-            associationType: VehicleClassification.FROTA,
+            associationType: AssociationType.FROTA,
           },
         });
       if (existingFrota) {
@@ -358,7 +358,7 @@ export class VehiclesService {
             vehicleId: vehicleId,
             accountId: accountId,
           },
-          associationType: VehicleClassification.FROTA,
+          associationType: AssociationType.FROTA,
         },
       });
 
@@ -415,7 +415,7 @@ export class VehiclesService {
 
     // Não permite que o vínculo FROTA seja apenas "desassociado" se não for o único
     // O FROTA deve ser tratado via deleteVehicle para o veículo físico
-    if (association.associationType === VehicleClassification.FROTA) {
+    if (association.associationType === AssociationType.FROTA) {
       const totalAssociations =
         await this.prisma.vehicleAccountAssociation.count({
           where: { vehicleId: vehicleId },
