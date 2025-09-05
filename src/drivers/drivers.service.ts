@@ -11,7 +11,7 @@ import { DriverQueryDto } from './dto/driver-query.dto';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Driver, DriverAccountAssociation, Account } from '@prisma/client'; // Importe os tipos necessários
 
-interface PaginatedResult<T> {
+export interface PaginatedResult<T> {
   data: T[];
   total: number;
   page: number;

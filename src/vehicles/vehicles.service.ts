@@ -1,4 +1,3 @@
-// backend/src/vehicles/vehicles.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -9,219 +8,245 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
-import { CreateVehicleAssociationDto } from './dto/create-vehicle-association.dto';
-import { UpdateVehicleAssociationDto } from './dto/update-vehicle-association.dto';
-import { AssociationType } from '@prisma/client'; // Importe o ENUM
+import { VehicleQueryDto } from './dto/vehicle-query.dto';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import {
+  Vehicle,
+  Driver,
+  VehicleAccountAssociation,
+  Account,
+} from '@prisma/client'; // Importe os tipos necessários
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 @Injectable()
 export class VehiclesService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Cria um novo veículo físico e sua primeira associação com a conta do usuário logado.
+   * Cria um novo veículo físico (globalmente).
    * A placa deve ser única no sistema.
-   * O tipo de vínculo pode ser FROTA, AGREGADO ou TERCEIRO.
    */
-  async createVehicleAndAssociation(
-    createVehicleDto: CreateVehicleDto,
-    accountId: string,
-  ) {
-    const { plate, associationType, groupId, ...vehicleData } =
-      createVehicleDto;
-
-    // A validação de que a placa é única no sistema para o veículo físico ainda é essencial.
-    const existingVehicle = await this.prisma.vehicle.findUnique({
-      where: { plate: plate.toUpperCase() },
-    });
-    if (existingVehicle) {
-      throw new ConflictException(
-        `Veículo com a placa ${plate} já existe no sistema.`,
-      );
-    }
-
-    return this.prisma.$transaction(async (prisma) => {
-      const newVehicle = await prisma.vehicle.create({
+  async create(createVehicleDto: CreateVehicleDto): Promise<Vehicle> {
+    try {
+      const newVehicle = await this.prisma.vehicle.create({
         data: {
-          plate: plate.toUpperCase(), // Armazena placas em maiúsculas para consistência
-          ...vehicleData,
+          plate: createVehicleDto.plate.toUpperCase(),
+          brand: createVehicleDto.brand,
+          model: createVehicleDto.model,
+          year: createVehicleDto.year,
+          trackerDeviceId: createVehicleDto.trackerDeviceId,
+          trackerType: createVehicleDto.trackerType,
+          active: createVehicleDto.active,
+          driverId: createVehicleDto.driverId,
+          operationalStatus: createVehicleDto.operationalStatus,
+          logisticStatus: createVehicleDto.logisticStatus,
+          efficiencyKmH: createVehicleDto.efficiencyKmH,
+          idleTimeMinutes: createVehicleDto.idleTimeMinutes,
+          distanceToDestinationKm: createVehicleDto.distanceToDestinationKm,
+          currentLocationLat: createVehicleDto.currentLocationLat,
+          currentLocationLon: createVehicleDto.currentLocationLon,
+          currentLocationAddress: createVehicleDto.currentLocationAddress,
+          kmToday: createVehicleDto.kmToday,
+          inMaintenance: createVehicleDto.inMaintenance,
         },
       });
-
-      // Validação extra se groupId foi fornecido
-      if (groupId) {
-        const groupExists = await prisma.vehicleGroup.findUnique({
-          where: { id: groupId, accountId: accountId }, // Certifica que o grupo pertence à conta
-        });
-        if (!groupExists) {
-          throw new NotFoundException(
-            `Grupo com ID ${groupId} não encontrado ou não pertence à sua conta.`,
+      return newVehicle;
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          // Unique constraint violation
+          const target = error.meta?.target as string | string[];
+          if (target === 'plate') {
+            throw new ConflictException(
+              `Veículo com a placa '${createVehicleDto.plate}' já existe no sistema.`,
+            );
+          }
+          throw new ConflictException(
+            'Um conflito de dados foi detectado (valor duplicado). Por favor, verifique os dados de entrada.',
+          );
+        } else if (error.code === 'P2000') {
+          throw new BadRequestException(
+            'O valor fornecido é muito longo ou possui formato inválido para um dos campos.',
           );
         }
       }
-
-      // Se o tipo de associação for FROTA, a DB constraint `uix_one_frota_per_vehicle` vai garantir a unicidade global.
-      // Se já existir um FROTA para este veículo, a transação falhará aqui.
-      await prisma.vehicleAccountAssociation.create({
-        data: {
-          vehicleId: newVehicle.id,
-          accountId: accountId,
-          associationType: associationType, // Agora permite qualquer tipo
-          isActiveForAccount: true,
-          groupId: groupId,
-        },
-      });
-
-      return newVehicle; // Retorna o veículo criado
-    });
+      throw error;
+    }
   }
 
   /**
-   * Associa um veículo físico existente a uma conta com um tipo de vínculo específico.
-   * Usado para AGREGADO/TERCEIRO ou para uma nova associação FROTA (que falhará se já houver uma).
+   * Lista todos os veículos no sistema, com opções de filtro e paginação.
+   * Pode incluir associações para filtragem avançada.
    */
-  async createVehicleAssociation(
-    createAssociationDto: CreateVehicleAssociationDto,
-    accountId: string,
-  ) {
-    const { vehicleId, associationType, groupId } = createAssociationDto;
+  async findAll(query: VehicleQueryDto): Promise<
+    PaginatedResult<
+      Vehicle & {
+        accountAssociations?: (VehicleAccountAssociation & {
+          account: Account;
+        })[];
+        driver?: Driver;
+      }
+    >
+  > {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'plate',
+      sortOrder = 'asc',
+      search,
+      operationalStatus,
+      logisticStatus,
+      driverId,
+      inMaintenance,
+      associationType,
+      isActiveForAccount,
+      associatedAccountId,
+    } = query;
+    const offset = (page - 1) * limit;
 
-    // 1. Verifica se o veículo físico existe
+    const where: any = {};
+    const include: any = {
+      driver: true, // Inclui os dados do motorista principal
+      accountAssociations: {
+        include: {
+          account: true,
+        },
+        // Onde para associations
+        where: {
+          ...(isActiveForAccount !== undefined && {
+            isActiveForAccount: isActiveForAccount,
+          }),
+          ...(associationType && { associationType: associationType }),
+          ...(associatedAccountId && { accountId: associatedAccountId }),
+        },
+      },
+    };
+
+    if (search) {
+      where.OR = [
+        { plate: { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } },
+        { model: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (operationalStatus) {
+      where.operationalStatus = operationalStatus;
+    }
+    if (logisticStatus) {
+      where.logisticStatus = logisticStatus;
+    }
+    if (driverId) {
+      where.driverId = driverId;
+    }
+    if (inMaintenance !== undefined) {
+      where.inMaintenance = inMaintenance;
+    }
+
+    // Se houver filtros específicos de associação que não são cobertos pelo `include.accountAssociations.where` acima
+    // (Ex: Se quiser buscar veículos que *não* tenham um certo tipo de associação)
+    // Isso pode se tornar complexo e talvez seja melhor no serviço de associações.
+    // Por enquanto, o include.where filtra o que é retornado, mas o `where` principal filtra o veículo raiz.
+    if (
+      (associationType ||
+        isActiveForAccount !== undefined ||
+        associatedAccountId) &&
+      !where.accountAssociations
+    ) {
+      // Se a query pede um filtro na associação mas não na inclusão principal
+      // Aqui, garantimos que o filtro de associação influencie o veículo raiz
+      where.accountAssociations = {
+        some: {
+          // 'some' porque o veículo pode ter múltiplas associações
+          ...(isActiveForAccount !== undefined && {
+            isActiveForAccount: isActiveForAccount,
+          }),
+          ...(associationType && { associationType: associationType }),
+          ...(associatedAccountId && { accountId: associatedAccountId }),
+        },
+      };
+    }
+
+    const vehicles = await this.prisma.vehicle.findMany({
+      where,
+      include,
+      take: limit,
+      skip: offset,
+      orderBy: {
+        [sortBy]: sortOrder,
+      },
+    });
+
+    const total = await this.prisma.vehicle.count({ where });
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: vehicles,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
+  }
+
+  /**
+   * Busca um veículo específico pelo seu ID.
+   */
+  async findOne(id: string): Promise<
+    Vehicle & {
+      accountAssociations?: (VehicleAccountAssociation & {
+        account: Account;
+      })[];
+      driver?: Driver;
+    }
+  > {
     const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: vehicleId },
+      where: { id },
+      include: {
+        driver: true,
+        accountAssociations: {
+          include: { account: true },
+        },
+      },
     });
     if (!vehicle) {
-      throw new NotFoundException(
-        `Veículo com ID ${vehicleId} não encontrado.`,
-      );
+      throw new NotFoundException(`Veículo com ID "${id}" não encontrado.`);
     }
-
-    // 2. Verifica se já existe uma associação deste veículo com esta conta
-    const existingAssociation =
-      await this.prisma.vehicleAccountAssociation.findUnique({
-        where: {
-          vehicleId_accountId: {
-            vehicleId: vehicleId,
-            accountId: accountId,
-          },
-        },
-      });
-
-    if (existingAssociation) {
-      throw new ConflictException(
-        `Veículo com ID ${vehicleId} já está associado à sua conta como ${existingAssociation.associationType}. Use a rota de atualização.`,
-      );
-    }
-
-    // 3. Validações específicas para associationType
-    if (associationType === AssociationType.FROTA) {
-      // Se tentar adicionar um novo vínculo FROTA, a DB constraint `uix_one_frota_per_vehicle` já vai pegar
-      // Mas podemos dar uma mensagem mais amigável
-      const existingFrota =
-        await this.prisma.vehicleAccountAssociation.findFirst({
-          where: {
-            vehicleId: vehicleId,
-            associationType: AssociationType.FROTA,
-          },
-        });
-      if (existingFrota) {
-        throw new ConflictException(
-          `Veículo com ID ${vehicleId} já possui um vínculo FROTA (FIXO) com a conta ${existingFrota.accountId}.`,
-        );
-      }
-    }
-
-    // 4. Validação extra se groupId foi fornecido
-    if (groupId) {
-      const groupExists = await this.prisma.vehicleGroup.findUnique({
-        where: { id: groupId, accountId: accountId },
-      });
-      if (!groupExists) {
-        throw new NotFoundException(
-          `Grupo com ID ${groupId} não encontrado ou não pertence à sua conta.`,
-        );
-      }
-    }
-
-    // 5. Cria a nova associação
-    return this.prisma.vehicleAccountAssociation.create({
-      data: {
-        vehicleId: vehicleId,
-        accountId: accountId,
-        associationType: associationType,
-        isActiveForAccount: true, // Por padrão, ativa
-        groupId: groupId,
-      },
-      include: { vehicle: true }, // Inclui os dados do veículo associado
-    });
+    return vehicle;
   }
 
   /**
-   * Lista todos os veículos (e suas associações) ativos para uma conta específica.
+   * Atualiza os dados físicos de um veículo.
+   * Apenas o proprietário FROTA pode fazer isso (lógica transferida para cá do antigo service).
    */
-  async findAllByAccount(accountId: string) {
-    return this.prisma.vehicleAccountAssociation.findMany({
-      where: {
-        accountId: accountId,
-        isActiveForAccount: true, // Apenas veículos ativos para esta conta
-      },
-      include: {
-        vehicle: true, // Inclui os dados físicos do veículo
-        group: true, // Inclui os dados do grupo, se houver
-      },
-    });
-  }
-
-  /**
-   * Busca um veículo específico e sua associação para uma conta.
-   * Retorna null se não encontrado ou inativo para esta conta.
-   */
-  async findOneByAccount(vehicleId: string, accountId: string) {
-    const association = await this.prisma.vehicleAccountAssociation.findUnique({
-      where: {
-        vehicleId_accountId: {
-          vehicleId: vehicleId,
-          accountId: accountId,
-        },
-        isActiveForAccount: true, // Apenas se estiver ativo para esta conta
-      },
-      include: {
-        vehicle: true,
-        group: true,
-      },
-    });
-
-    if (!association) {
-      throw new NotFoundException(
-        `Veículo com ID ${vehicleId} não encontrado ou não ativo para sua conta.`,
-      );
-    }
-    return association;
-  }
-
-  /**
-   * Atualiza os dados físicos de um veículo. Apenas o proprietário FROTA pode fazer isso.
-   */
-  async updateVehicleData(
+  async update(
     vehicleId: string,
     accountId: string,
     updateVehicleDto: UpdateVehicleDto,
-  ) {
+  ): Promise<Vehicle> {
     // 1. Verificar se o veículo existe
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
     });
     if (!vehicle) {
       throw new NotFoundException(
-        `Veículo com ID ${vehicleId} não encontrado.`,
+        `Veículo com ID "${vehicleId}" não encontrado.`,
       );
     }
 
-    // 2. Verificar se existe uma associação FROTA para este veículo (de qualquer conta)
+    // 2. Verificar permissão baseada na associação FROTA
     const frotaAssociation =
       await this.prisma.vehicleAccountAssociation.findFirst({
         where: {
           vehicleId: vehicleId,
-          associationType: AssociationType.FROTA,
+          associationType: 'FROTA',
+          isActiveForAccount: true,
         },
       });
 
@@ -252,104 +277,68 @@ export class VehiclesService {
         );
       }
     } else {
-      // Se NÃO existe um proprietário FROTA, qualquer conta com uma associação pode editar.
+      // Se NÃO existe um proprietário FROTA ativo, qualquer conta com uma associação ativa pode editar.
       // ATENÇÃO: Esta regra pode levar a inconsistências se múltiplas contas (AGREGADO/TERCEIRO)
       // tentarem editar os mesmos dados (especialmente a placa) simultaneamente.
-      // Considere adicionar um mecanismo de bloqueio otimista ou notificação em um ambiente de produção.
+      // Em produção, considere um mecanismo de bloqueio otimista ou notificação.
       console.warn(
         `AVISO: Veículo ${vehicleId} está sendo editado por uma conta não-FROTA (${accountId}). Sem proprietário FROTA, a edição é compartilhada, o que pode gerar inconsistências de dados se não for gerenciado externamente.`,
       );
     }
 
     // 5. Permite a atualização dos dados físicos do veículo
-    return this.prisma.vehicle.update({
-      where: { id: vehicleId },
-      data: {
-        plate: updateVehicleDto.plate?.toUpperCase(), // Garante maiúsculas para a placa
-        ...updateVehicleDto,
-      },
-    });
-  }
-
-  /**
-   * Atualiza os dados de uma associação de veículo-conta específica.
-   */
-  async updateVehicleAccountAssociation(
-    vehicleId: string,
-    accountId: string,
-    updateAssociationDto: UpdateVehicleAssociationDto,
-  ) {
-    // 1. Verifica se a associação existe
-    const association = await this.prisma.vehicleAccountAssociation.findUnique({
-      where: {
-        vehicleId_accountId: {
-          vehicleId: vehicleId,
-          accountId: accountId,
+    try {
+      const updatedVehicle = await this.prisma.vehicle.update({
+        where: { id: vehicleId },
+        data: {
+          plate: updateVehicleDto.plate?.toUpperCase(),
+          brand: updateVehicleDto.brand,
+          model: updateVehicleDto.model,
+          year: updateVehicleDto.year,
+          trackerDeviceId: updateVehicleDto.trackerDeviceId,
+          trackerType: updateVehicleDto.trackerType,
+          active: updateVehicleDto.active,
+          driverId: updateVehicleDto.driverId,
+          operationalStatus: updateVehicleDto.operationalStatus,
+          logisticStatus: updateVehicleDto.logisticStatus,
+          efficiencyKmH: updateVehicleDto.efficiencyKmH,
+          idleTimeMinutes: updateVehicleDto.idleTimeMinutes,
+          distanceToDestinationKm: updateVehicleDto.distanceToDestinationKm,
+          currentLocationLat: updateVehicleDto.currentLocationLat,
+          currentLocationLon: updateVehicleDto.currentLocationLon,
+          currentLocationAddress: updateVehicleDto.currentLocationAddress,
+          kmToday: updateVehicleDto.kmToday,
+          inMaintenance: updateVehicleDto.inMaintenance,
+          updatedAt: new Date(),
         },
-      },
-    });
-
-    if (!association) {
-      throw new NotFoundException(
-        `Associação do veículo ${vehicleId} com sua conta não encontrada.`,
-      );
-    }
-
-    // 2. Validações para mudança de associationType para FROTA
-    if (
-      updateAssociationDto.associationType === AssociationType.FROTA &&
-      association.associationType !== AssociationType.FROTA
-    ) {
-      // Se está tentando mudar para FROTA e não era FROTA antes
-      const existingFrota =
-        await this.prisma.vehicleAccountAssociation.findFirst({
-          where: {
-            vehicleId: vehicleId,
-            associationType: AssociationType.FROTA,
-          },
-        });
-      if (existingFrota) {
-        throw new ConflictException(
-          `Veículo com ID ${vehicleId} já possui um vínculo FROTA (FIXO) com a conta ${existingFrota.accountId}. Não é possível ter dois FROTA.`,
-        );
-      }
-    }
-
-    // 3. Validação extra se groupId foi fornecido (ou removido)
-    if (updateAssociationDto.groupId !== undefined) {
-      // Check if groupId is explicitly provided
-      if (updateAssociationDto.groupId !== null) {
-        // If it's not null (meaning user wants to assign a group)
-        const groupExists = await this.prisma.vehicleGroup.findUnique({
-          where: { id: updateAssociationDto.groupId, accountId: accountId },
-        });
-        if (!groupExists) {
+      });
+      return updatedVehicle;
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
           throw new NotFoundException(
-            `Grupo com ID ${updateAssociationDto.groupId} não encontrado ou não pertence à sua conta.`,
+            `Veículo com ID "${vehicleId}" não encontrado.`,
+          );
+        }
+        if (error.code === 'P2002') {
+          throw new ConflictException(
+            `A placa '${updateVehicleDto.plate}' já está em uso por outro veículo.`,
+          );
+        } else if (error.code === 'P2000') {
+          throw new BadRequestException(
+            'O valor fornecido é muito longo ou possui formato inválido para um dos campos.',
           );
         }
       }
-      // If groupId is null, it means the user wants to remove the vehicle from any group
+      throw error;
     }
-
-    // 4. Atualiza a associação
-    return this.prisma.vehicleAccountAssociation.update({
-      where: {
-        vehicleId_accountId: {
-          vehicleId: vehicleId,
-          accountId: accountId,
-        },
-      },
-      data: updateAssociationDto,
-      include: { vehicle: true, group: true },
-    });
   }
 
   /**
    * Deleta o veículo físico e todas as suas associações.
-   * Apenas o proprietário FROTA pode fazer isso.
+   * Apenas o proprietário FROTA pode fazer isso, e se não houver outras associações ativas.
    */
-  async deleteVehicle(vehicleId: string, accountId: string) {
+  async remove(vehicleId: string, accountId: string): Promise<void> {
     // 1. Verificar se a conta logada é a proprietária 'FROTA' (FIXO)
     const frotaAssociation =
       await this.prisma.vehicleAccountAssociation.findUnique({
@@ -358,13 +347,14 @@ export class VehiclesService {
             vehicleId: vehicleId,
             accountId: accountId,
           },
-          associationType: AssociationType.FROTA,
+          associationType: 'FROTA',
+          isActiveForAccount: true, // Apenas se a associação FROTA está ativa
         },
       });
 
     if (!frotaAssociation) {
       throw new ForbiddenException(
-        'Você não tem permissão para excluir este veículo. Apenas o proprietário FROTA pode.',
+        'Você não tem permissão para excluir este veículo. Apenas o proprietário FROTA ativo pode.',
       );
     }
 
@@ -387,66 +377,25 @@ export class VehiclesService {
     // 3. Se não houver outras associações ativas, permite a exclusão física do veículo.
     // As associações na tabela 'vehicle_account_associations' serão deletadas em cascata
     // devido à foreign key ON DELETE CASCADE que já configuramos no SQL do DB.
-    return this.prisma.vehicle.delete({
-      where: { id: vehicleId },
-    });
-  }
-
-  /**
-   * Deleta uma associação específica de um veículo com uma conta.
-   * Isso não deleta o veículo físico, apenas o desvincula da conta.
-   * Qualquer usuário da conta pode fazer isso.
-   */
-  async deleteVehicleAccountAssociation(vehicleId: string, accountId: string) {
-    const association = await this.prisma.vehicleAccountAssociation.findUnique({
-      where: {
-        vehicleId_accountId: {
-          vehicleId: vehicleId,
-          accountId: accountId,
-        },
-      },
-    });
-
-    if (!association) {
-      throw new NotFoundException(
-        `Associação do veículo ${vehicleId} com sua conta não encontrada.`,
-      );
-    }
-
-    // Não permite que o vínculo FROTA seja apenas "desassociado" se não for o único
-    // O FROTA deve ser tratado via deleteVehicle para o veículo físico
-    if (association.associationType === AssociationType.FROTA) {
-      const totalAssociations =
-        await this.prisma.vehicleAccountAssociation.count({
-          where: { vehicleId: vehicleId },
-        });
-      if (totalAssociations > 1) {
-        // Se houver outras associações (AGREGADO/TERCEIRO)
-        throw new ForbiddenException(
-          'Não é possível desassociar um vínculo FROTA (FIXO) se o veículo ainda estiver associado a outras contas. Considere a exclusão total do veículo se ele não será mais usado por ninguém.',
-        );
+    try {
+      await this.prisma.vehicle.delete({
+        where: { id: vehicleId },
+      });
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
+          throw new NotFoundException(
+            `Veículo com ID "${vehicleId}" não encontrado.`,
+          );
+        }
+        if (error.code === 'P2003') {
+          // Foreign key constraint failed (e.g., if there are current trips or positions)
+          throw new BadRequestException(
+            `Não é possível excluir o veículo com ID "${vehicleId}" porque ele possui dados vinculados (ex: viagens, posições). Desvincule-o primeiro.`,
+          );
+        }
       }
-      // Se for a única associação e FROTA, a exclusão da associação implica na exclusão do veículo físico
-      // Para isso, chame deleteVehicle.
-      throw new BadRequestException(
-        'Para remover o veículo FROTA, utilize a rota de exclusão de veículo físico.',
-      );
+      throw error;
     }
-
-    return this.prisma.vehicleAccountAssociation.delete({
-      where: {
-        vehicleId_accountId: {
-          vehicleId: vehicleId,
-          accountId: accountId,
-        },
-      },
-    });
-  }
-
-  // Helper para buscar grupos por accountId
-  async getVehicleGroupById(groupId: string, accountId: string) {
-    return this.prisma.vehicleGroup.findUnique({
-      where: { id: groupId, accountId: accountId },
-    });
   }
 }

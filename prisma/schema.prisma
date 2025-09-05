@@ -221,22 +221,24 @@ model Vehicle {
   @@map("vehicles")
 }
 
-// VehicleAccountAssociation - AGORA USA AssociationType
+// Modelo VehicleAccountAssociation (CORRIGIDO)
 model VehicleAccountAssociation {
+  id                 String                 @id @default(uuid()) // PK única
   vehicleId        String                 @map("vehicle_id")
   accountId        String                 @map("account_id")
-  associationType  AssociationType        @map("association_type") // AGORA USA AssociationType
+  associationType  AssociationType        @map("association_type")
   isActiveForAccount Boolean              @default(true) @map("is_active_for_account")
   groupId          String?                @map("group_id")
 
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
 
+  // Relacionamentos
   vehicle Vehicle @relation("VehicleAccountAssociations", fields: [vehicleId], references: [id])
   account Account @relation("AccountVehicleAssociations", fields: [accountId], references: [id])
   group   VehicleGroup? @relation(fields: [groupId], references: [id])
 
-  @@id([vehicleId, accountId])
+  @@unique([vehicleId, accountId]) // AGORA É UMA RESTRIÇÃO DE UNICIDADE, NÃO PK
   @@map("vehicle_account_associations")
 }
 
